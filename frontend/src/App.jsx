@@ -4,6 +4,7 @@ import Wallet, { Outcomes } from './components/Wallet.jsx';
 import Controls from './components/Controls.jsx';
 import Lanes, { StatusBar, overallPhase, useLanes } from './components/Lanes.jsx';
 import LogStream from './components/LogStream.jsx';
+import logo from './assets/rtpeico.svg';
 
 const POLL_MS = 500;
 const LOG_CAP = 400;
@@ -79,7 +80,7 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="logo">
-          <span className="logo-icon"><i className="ph ph-pulse" /></span>
+          <img src={logo} alt="RTPE Cockpit" />
           <h1 className="logo-title"><span>RTPE</span><span>Cockpit</span></h1>
         </div>
         <div className="app-header-navigation">
