@@ -53,9 +53,5 @@ npm run dev
 | POST | `/api/transactions?id=&label=&amount=&fail=` | Submit a transaction |
 | POST | `/api/reset` | Reset the sandbox |
 
-## Deploy on Render
 
-- **Backend:** Web Service, Docker runtime, root `backend`, health check `/api/state`. The container must map Render's `PORT` to `RTPE_PORT`.
-- **Frontend:** Static Site, root `frontend`, build `npm install && npm run build`, publish `dist`, env `VITE_RTPE_URL=<backend URL>`.
-
-State is held in memory, so a restart clears it. Run a single instance only.
+Creating a test api for intrested users 
