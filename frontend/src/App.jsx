@@ -1,15 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchState, resetSandbox, submitTransaction } from './api.js';
+import { BASE, fetchState, resetSandbox, submitTransaction } from './api.js';
 import Wallet, { Outcomes } from './components/Wallet.jsx';
 import Controls from './components/Controls.jsx';
 import Lanes, { StatusBar, overallPhase, useLanes } from './components/Lanes.jsx';
 import LogStream from './components/LogStream.jsx';
 import logo from './assets/rtpeico.svg';
+import Sentinel from './components/Sentinel.jsx';
 
 const POLL_MS = 500;
 const LOG_CAP = 400;
+const FAILS_BEFORE_BANNER = 3;      // one dropped poll is not an outage
+const WAKE_GRACE_MS = 90_000;       // Render free tier needs up to ~60s to wake after idling
+const ON_RENDER = /\.onrender\.com$/i.test(new URL(BASE, window.location.href).hostname);
+
+const LINK_TEXT = {
+  connecting: 'Connecting to engine',
+  online: 'Engine connected',
+  waking: 'Engine is waking up, this can take a minute',
+  offline: `Engine unreachable at ${BASE}`,
+};
+const LINK_CLASS = { connecting: 'wait', online: 'up', waking: 'wait', offline: 'down' };
 
 const PHASE_LABEL = {
+  connecting: 'Connecting to engine',
   offline: 'Engine offline',
   conflict: 'Concurrent request detected',
   absorbing: 'Absorbing duplicates',
@@ -22,12 +35,17 @@ const PHASE_LABEL = {
 export default function App() {
   const [state, setState] = useState(null);
   const [logs, setLogs] = useState([]);
-  const [online, setOnline] = useState(true);
+  const [conn, setConn] = useState('connecting');   // connecting | online | waking | offline
+  const [connError, setConnError] = useState('');
   const [notice, setNotice] = useState('');
   const lanes = useLanes(state, logs);
-  const phase = overallPhase(lanes, online);
+  const phase = conn === 'offline' ? 'offline'
+    : conn === 'connecting' || conn === 'waking' ? 'connecting'
+    : overallPhase(lanes, true);
   const lastSeq = useRef(0);
   const inFlight = useRef(false);
+  const fails = useRef(0);
+  const firstFailAt = useRef(0);
 
   const [theme, setTheme] = useState(() => {
   try { return localStorage.getItem('rtpe-theme') ?? 'dark'; } catch { return 'dark'; }
@@ -52,9 +70,17 @@ export default function App() {
           setLogs((prev) => [...prev, ...next.logs].slice(-LOG_CAP));
         }
         setState(next);
-        setOnline(true);
-      } catch {
-        setOnline(false);
+        fails.current = 0;
+        setConn('online');
+        setConnError('');
+      } catch (err) {
+        if (fails.current === 0) firstFailAt.current = Date.now();
+        fails.current += 1;
+        setConnError(err.message);
+        if (fails.current >= FAILS_BEFORE_BANNER) {
+          const waking = ON_RENDER && err.network && Date.now() - firstFailAt.current < WAKE_GRACE_MS;
+          setConn(waking ? 'waking' : 'offline');
+        }
       } finally {
         inFlight.current = false;
       }
@@ -102,8 +128,8 @@ export default function App() {
             </div>
           </div>
           <div className="app-header-actions">
-            <span className={`link ${online ? 'up' : 'down'}`}>
-              <i />{online ? 'Engine connected' : 'Engine unreachable, start the backend'}
+            <span className={`link ${LINK_CLASS[conn]}`} title={connError || undefined} role="status">
+              <i />{LINK_TEXT[conn]}
             </span>
             <div className="app-header-actions-buttons">
               <button className="icon-button large" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
@@ -141,6 +167,7 @@ export default function App() {
 
           <div className="app-body-sidebar">
             <Controls fire={fire} notice={notice} balance={state?.wallet?.balanceCents} />
+            <a href="#sentinel"><i className="ph ph-shield-checkered" /><span>Sentinel</span></a>
             <Outcomes state={state} />
           </div>
         </div>

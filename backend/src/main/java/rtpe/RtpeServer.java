@@ -27,8 +27,9 @@ public final class RtpeServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.setExecutor(Executors.newFixedThreadPool(8));
         server.createContext("/api/state", ex -> route(ex, "GET", this::state));
-        server.createContext("/api/transactions", ex -> route(ex, "POST", this::submit));
+        server.createContext("/api/transactions", ex -> { if (!Sentinel.gate(ex)) route(ex, "POST", this::submit); });
         server.createContext("/api/reset", ex -> route(ex, "POST", this::reset));
+        Sentinel.install(server, log);
         server.start();
         log.log("INFO", "RTPE listening on :%d", port);
     }
@@ -40,7 +41,7 @@ public final class RtpeServer {
     private void route(HttpExchange ex, String method, Action action) throws IOException {
         ex.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
         ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        ex.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
+        ex.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, X-Device-Id");
         try {
             if ("OPTIONS".equals(ex.getRequestMethod())) {
                 ex.sendResponseHeaders(204, -1);

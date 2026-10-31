@@ -53,7 +53,7 @@ h1, h2, h3, p, dl, dd { margin: 0; }
 
 .link { display: inline-flex; align-items: center; gap: .5rem; font-size: .85rem; }
 .link i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-.link.up { color: var(--go); } .link.down { color: var(--alert); }
+.link.up { color: var(--go); } .link.down { color: var(--alert); } .link.wait { color: var(--warn); }
 
 h2 { font-size: 1.25rem; font-weight: 500; }
 h2.sub { margin-top: 2rem; font-size: 1rem; }
@@ -96,6 +96,7 @@ h2.sub { margin-top: 2rem; font-size: 1rem; }
 /* ---------- phase indicators (the only colour) ---------- */
 .tracking { --c: var(--go); } .conflict { --c: var(--alert); } .absorbing { --c: var(--warn); }
 .resolved { --c: var(--go); } .failed, .offline { --c: var(--alert); } .idle { --c: var(--muted); }
+.connecting { --c: var(--warn); }
 
 .pbar { position: relative; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .pbar.big { height: 8px; border-radius: 4px; }
@@ -108,6 +109,7 @@ h2.sub { margin-top: 2rem; font-size: 1rem; }
 .resolved .pbar-fill, .failed .pbar-fill { animation: settle .6s ease-out both; }
 .lane.resolved, .lane.failed { animation: ghost 2.6s ease-in forwards; }
 .idle .pbar-fill, .offline .pbar-fill { opacity: .4; }
+.connecting .pbar-fill { opacity: .5; }
 
 .statusbar { display: flex; align-items: center; gap: 1.25rem; margin-bottom: 2.5rem; padding: .9rem 1.1rem; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--line)); border-radius: 12px; background: var(--surface); }
 .statusbar-label { display: inline-flex; align-items: center; min-width: 250px; color: var(--c); font-weight: 500; }
@@ -222,6 +224,22 @@ h2.sub { margin-top: 2rem; font-size: 1rem; }
   .dock-balance span { font-size: .7rem; color: var(--muted); }
   .dock-balance b { font-weight: 500; font-variant-numeric: tabular-nums; }
 }
+
+.sx-presets { display: flex; flex-wrap: wrap; gap: .4rem; margin: .9rem 0 .7rem; }
+.sx-chip { padding: .3rem .7rem; border: 1px solid var(--line); border-radius: 99px; background: transparent; color: var(--muted); cursor: pointer; font-size: .78rem; transition: .2s; }
+.sx-chip:hover, .sx-chip.on { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+.sx-text { width: 100%; min-height: 84px; resize: vertical; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .8rem; }
+.sx-actions { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-top: .8rem; }
+.sx-you, .sx-stats { color: var(--muted); font-size: .78rem; margin-top: .9rem; }
+.sx-actions .sx-stats { margin-top: 0; }
+.sx-lanes { display: flex; flex-direction: column; gap: .6rem; margin-top: 1rem; }
+.sx-lane { padding: .75rem .85rem; }
+.sx-top { display: flex; align-items: center; gap: .6rem; margin-bottom: .35rem; font-size: .8rem; }
+.sx-time { margin-left: auto; color: var(--c); font-variant-numeric: tabular-nums; }
+.sx-note { color: var(--muted); font-size: .78rem; margin-bottom: .55rem; }
+.save-button:disabled { opacity: .4; cursor: not-allowed; }
+@media (max-width: 1200px) { #sentinel.payment-section { order: 3; } }
+
 @media (prefers-reduced-motion: reduce) {
   .pbar-fill, .pbar-fill::after, .phase-chip i, .badge .dot, .lane, .statusbar-label::before { animation: none !important; transition: none; }
   .conflict .pbar { outline: 2px dashed var(--alert); }
