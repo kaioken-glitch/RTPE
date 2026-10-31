@@ -11,7 +11,8 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; display: flex; justify-content: center; padding: 2.5vw 0; line-height: 1.5;
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; min-height: 100vh; width: 100%; overflow-x: clip; padding: 2.5vw 0; line-height: 1.5;
   font-family: 'Be Vietnam Pro', sans-serif; background: var(--bg); color: var(--fg); transition: background .25s, color .25s; }
 code, time, .log-box { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 button, input { font: inherit; }
@@ -21,7 +22,7 @@ h1, h2, h3, p, dl, dd { margin: 0; }
 
 /* ---------- layout ---------- */
 .app { width: 95%; max-width: 1500px; margin: 0 auto; min-width: 0; display: flex; flex-direction: column; }
-.app-header > *, .app-body > * { min-width: 0; }
+.app-header > *, .app-body > *, .app-body-main-content > *, .app-body-sidebar > * { min-width: 0; max-width: 100%; }
 .app-header { display: grid; grid-template-columns: 175px 1fr auto; column-gap: 3rem; align-items: center; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
 .app-header-actions { display: flex; align-items: center; gap: 1rem; justify-content: flex-end; }
 .app-header-actions-buttons { display: flex; gap: .5rem; }
@@ -161,6 +162,8 @@ h2.sub { margin-top: 2rem; font-size: 1rem; }
 .dock-balance { display: none; }
 
 @media (max-width: 1200px) {
+    .app-body { width: 100%; align-items: stretch; }
+  #windows, #events, #simulate, #wallet, .payment-section, .statusbar { width: 100%; }
   .app-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem 1rem; }
   .app-header-navigation, .app-body-navigation { display: none; }
 
@@ -179,8 +182,8 @@ h2.sub { margin-top: 2rem; font-size: 1rem; }
 }
 
 @media (max-width: 800px) {
-  body { padding: .75rem 0 104px; }          /* room for the bottom dock */
-  .app { width: 100%; padding: 0 1rem; }
+    body { padding: .75rem 0 104px; }
+  .app { width: 100%; max-width: 100%; margin: 0; padding: 0 1rem; }
   .link { font-size: .75rem; }
   .icon-button { width: 40px; height: 40px; }
 
