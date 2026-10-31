@@ -8,7 +8,7 @@ const MODES = [
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export default function Controls({ fire, notice }) {
+export default function Controls({ fire, notice , balance }) {
   const [mode, setMode] = useState('standard');
   const [dollars, setDollars] = useState(25);
   const [fail, setFail] = useState(false);
@@ -62,6 +62,10 @@ export default function Controls({ fire, notice }) {
       {mode === 'multi' && <p className="hint">Active cart: <code>{cart}</code></p>}
 
       <div className="payment-section-footer">
+        <div className="dock-balance">
+          <span>Balance</span>
+          <b>{balance == null ? '--' : `$${(balance / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}</b>
+        </div>
         {mode === 'standard' && <button className="save-button solid" onClick={standard}>Pay ${Number(dollars || 0).toFixed(2)}</button>}
         {mode === 'multi' && (
           <>

@@ -29,6 +29,14 @@ export default function App() {
   const lastSeq = useRef(0);
   const inFlight = useRef(false);
 
+  const [theme, setTheme] = useState(() => {
+  try { return localStorage.getItem('rtpe-theme') ?? 'dark'; } catch { return 'dark'; }
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem('rtpe-theme', theme); } catch { /* storage blocked, ignore */ }
+  }, [theme]);
+
   useEffect(() => {
     const tick = async () => {
       if (inFlight.current) return;
@@ -77,59 +85,81 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="logo">
-          <img src={logo} alt="RTPE Cockpit" />
-          <h1 className="logo-title"><span>RTPE</span><span>Cockpit</span></h1>
-        </div>
-        <div className="app-header-navigation">
-          <div className="tabs">
-            <a href="#wallet">Wallet</a>
-            <a href="#windows">Windows</a>
-            <a href="#events">Events</a>
-            <a href="#simulate">Simulation</a>
+    <div className="stage" data-phase={phase}>
+      <Aurora />
+      <div className="app">
+        <header className="app-header">
+          <div className="logo">
+            <img src={logo} alt="RTPE Cockpit" />
+            <h1 className="logo-title"><span>RTPE</span><span>Cockpit</span></h1>
           </div>
-        </div>
-        <div className="app-header-actions">
-          <span className={`link ${online ? 'up' : 'down'}`}>
-            <i />{online ? 'Engine connected' : 'Engine unreachable, start the backend'}
-          </span>
-          <div className="app-header-actions-buttons">
-            <button className="icon-button large" onClick={reset} title="Reset sandbox" aria-label="Reset sandbox">
-              <i className="ph ph-arrow-counter-clockwise" />
-            </button>
+          <div className="app-header-navigation">
+            <div className="tabs">
+              <a href="#wallet">Wallet</a>
+              <a href="#windows">Windows</a>
+              <a href="#events">Events</a>
+              <a href="#simulate">Simulation</a>
+            </div>
           </div>
-        </div>
-      </header>
+          <div className="app-header-actions">
+            <span className={`link ${online ? 'up' : 'down'}`}>
+              <i />{online ? 'Engine connected' : 'Engine unreachable, start the backend'}
+            </span>
+            <div className="app-header-actions-buttons">
+              <button className="icon-button large" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                      title="Invert colours" aria-label="Invert colours">
+                <i className="ph ph-circle-half" />
+              </button>
+              <button className="icon-button large" onClick={reset} title="Reset sandbox" aria-label="Reset sandbox">
+                <i className="ph ph-arrow-counter-clockwise" />
+              </button>
+            </div>
+          </div>
+        </header>
 
-      <div className="app-body">
-        <div className="app-body-navigation">
-          <nav className="navigation">
-            <a href="#wallet"><i className="ph ph-wallet" /><span>Wallet</span></a>
-            <a href="#windows"><i className="ph ph-timer" /><span>Live windows</span></a>
-            <a href="#events"><i className="ph ph-terminal-window" /><span>Event stream</span></a>
-            <a href="#simulate"><i className="ph ph-lightning" /><span>Simulation</span></a>
-            <button className="nav-button" onClick={reset}><i className="ph ph-arrow-counter-clockwise" /><span>Reset sandbox</span></button>
-          </nav>
-          <footer className="footer">
-            <h1>RTPE<small>©</small></h1>
-            <div>Debouncing, self-healing<br />transaction queue</div>
-          </footer>
-        </div>
+        <div className="app-body">
+          <div className="app-body-navigation">
+            <nav className="navigation">
+              <a href="#wallet"><i className="ph ph-wallet" /><span>Wallet</span></a>
+              <a href="#windows"><i className="ph ph-timer" /><span>Live windows</span></a>
+              <a href="#events"><i className="ph ph-terminal-window" /><span>Event stream</span></a>
+              <a href="#simulate"><i className="ph ph-lightning" /><span>Simulation</span></a>
+              <button className="nav-button" onClick={reset}><i className="ph ph-arrow-counter-clockwise" /><span>Reset sandbox</span></button>
+            </nav>
+            <footer className="footer">
+              <h1>RTPE<small>©</small></h1>
+              <div>Debouncing, self-healing<br />transaction queue</div>
+            </footer>
+          </div>
 
-        <div className="app-body-main-content">
-          <StatusBar phase={phase} label={PHASE_LABEL[phase]} />
-          <Wallet state={state} />
-          <Lanes lanes={lanes} />
-          <LogStream logs={logs} />
-        </div>
+          <div className="app-body-main-content">
+            <StatusBar phase={phase} label={PHASE_LABEL[phase]} />
+            <Wallet state={state} />
+            <Lanes lanes={lanes} />
+            <LogStream logs={logs} />
+          </div>
 
-        <div className="app-body-sidebar">
-          <Controls fire={fire} notice={notice} />
-          <Outcomes state={state} />
+          <div className="app-body-sidebar">
+            <Controls fire={fire} notice={notice} balance={state?.wallet?.balanceCents} />
+            <Outcomes state={state} />
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function Aurora() {
+  return (
+    <>
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <filter id="liquid" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.008 0.012" numOctaves="2" seed="7" result="noise" />
+          <feGaussianBlur in="noise" stdDeviation="2" result="soft" />
+          <feDisplacementMap in="SourceGraphic" in2="soft" scale="34" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </svg>
+      <div className="aurora" aria-hidden="true"><span /><span /><span /></div>
+    </>
   );
 }
