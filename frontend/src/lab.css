@@ -1,0 +1,36 @@
+/* Sentinel lab. Specificity (.app-body.lab) keeps these rules winning regardless of stylesheet order. */
+.app-body.lab { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); column-gap: 3rem; padding-top: 2.25rem; }
+.lab-col { display: flex; flex-direction: column; gap: 2.5rem; min-width: 0; }
+.lab-card { width: 100%; }
+.lab-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.lab-row h2 { margin: 0; }
+.lab-form { display: flex; flex-direction: column; gap: .8rem; margin-top: 1rem; }
+.lab-form .save-button { align-self: flex-start; }
+.lab-points { margin: .6rem 0 1rem; color: var(--muted); }
+.lab-points b { color: var(--fg); font-size: 2rem; font-weight: 500; margin-right: .3rem; font-variant-numeric: tabular-nums; }
+.lab-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .9rem 1.2rem; margin: 0; }
+.lab-facts div { border-top: 1px solid var(--line); padding-top: .5rem; }
+.lab-facts dt { color: var(--muted); font-size: .75rem; }
+.lab-facts dd { margin: .1rem 0 0; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.lab-live { font-size: .75rem; color: var(--muted); display: inline-flex; align-items: center; gap: .4rem; }
+.lab-live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.lab-live.on { color: var(--go); }
+.lab-live.on::before { background: var(--go); animation: pulse 1.2s ease-in-out infinite; }
+.lab-log { height: 340px; }
+.lab-log p { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.lab-log time { color: var(--muted); }
+.lab-log b { font-weight: 500; }
+.lab-log .who { color: var(--fg); }
+.lab-log .mine { background: color-mix(in srgb, var(--go) 9%, transparent); }
+.lab-log .k-ok { color: var(--go); } .lab-log .k-warn { color: var(--warn); } .lab-log .k-bad { color: var(--alert); } .lab-log .k-info { color: var(--muted); }
+.lab-empty { color: var(--muted); }
+.lab-scroll { overflow-x: auto; margin-top: .9rem; }
+.lab-table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.lab-table th { text-align: left; font-weight: 400; color: var(--muted); padding: .35rem .6rem .35rem 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.lab-table td { padding: .45rem .6rem .45rem 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.lab-table tr.me td { color: var(--go); }
+.tabs a.on { color: var(--fg); border-color: var(--fg); }
+@media (max-width: 1000px) {
+  .app-body.lab { display: flex; flex-direction: column; gap: 2rem; padding-top: 1.5rem; }
+  .lab-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

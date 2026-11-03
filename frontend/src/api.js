@@ -25,19 +25,28 @@ export function deviceId() {
   }
 }
 
+const TOKEN_KEY = 'rtpe-token';
+export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
+export const setToken = (t) => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } };
+
 /**
- * device:false sends no custom header. A plain GET then needs no CORS preflight,
- * which halves the polling traffic and removes one way for a waking host to fail.
+ * device:false / auth:false send no custom headers. A plain GET or form POST then needs no CORS preflight,
+ * which halves polling traffic and removes one way for a waking host to fail.
  */
-async function raw(path, { timeoutMs = 8000, device = true, headers, ...opts } = {}) {
+async function raw(path, { timeoutMs = 8000, device = true, auth = true, headers, ...opts } = {}) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  const token = auth ? getToken() : null;
   let res;
   try {
     res = await fetch(`${BASE}${path}`, {
       ...opts,
       signal: ctl.signal,
-      headers: { ...(device ? { 'X-Device-Id': deviceId() } : {}), ...(headers ?? {}) },
+      headers: {
+        ...(device ? { 'X-Device-Id': deviceId() } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(headers ?? {}),
+      },
     });
   } catch (e) {
     throw new ApiError(e.name === 'AbortError' ? 'Request timed out' : 'Network error', { network: true });
@@ -50,11 +59,25 @@ async function raw(path, { timeoutMs = 8000, device = true, headers, ...opts } =
 }
 const call = (path, method = 'GET', extra = {}) => raw(path, { method, ...extra });
 
-export const fetchState = (since) => call(`/api/state?since=${since}`, 'GET', { device: false });
+// Cockpit
+export const fetchState = (since) => call(`/api/state?since=${since}`, 'GET', { device: false, auth: false });
 export const resetSandbox = () => call('/api/reset', 'POST');
 export const submitTransaction = ({ id, label, amount, fail = false }) =>
   call(`/api/transactions?${new URLSearchParams({ id, label, amount, fail })}`, 'POST');
 
-// Sentinel: the attack test window
+// Sentinel lab
 export const fetchSentinel = () => call('/api/sentinel/feed');
 export const sendSandbox = (text) => raw('/sandbox', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
+export const communityStream = (since) => call(`/api/community/stream?since=${since}`, 'GET', { device: false, auth: false });
+export const leaderboard = () => call('/api/community/leaderboard', 'GET', { device: false, auth: false });
+
+// Accounts (form-encoded so the browser sends a simple request)
+const form = (path, name, password) => raw(path, {
+  method: 'POST', device: false, auth: false, timeoutMs: 20000,
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams({ username: name, password }).toString(),
+});
+export const register = (name, password) => form('/api/auth/register', name, password);
+export const login = (name, password) => form('/api/auth/login', name, password);
+export const logout = () => call('/api/auth/logout', 'POST', { device: false });
+export const fetchMe = () => call('/api/auth/me', 'GET', { device: false });
