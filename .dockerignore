@@ -1,8 +1,0 @@
-.git
-.github
-frontend
-backend/target
-docs
-node_modules
-**/node_modules
-**/dist

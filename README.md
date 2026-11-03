@@ -1,13 +1,71 @@
 # RTPE
 
-## Deploy the backend
+A debouncing, self-healing transaction queue with a live cockpit UI.
 
-The repository-root `Dockerfile` builds and runs the Java API from `backend/`.
-For a Docker-based web service, use the repository root as the build context.
-The server listens on `RTPE_PORT` when set, then `PORT`, and defaults to `8080`.
+Duplicate requests for the same transaction are absorbed into a buffer while the first request owns a time window. If the owner fails, the next buffered duplicate is re-validated and promoted. If it succeeds, every duplicate is discarded.
 
-## Deploy the frontend
+## How it works
 
-The Vite frontend is in `frontend/` and should be deployed as a separate static
-site. Set its project root to `frontend`, build with `npm ci && npm run build`,
-publish `dist`, and set `VITE_RTPE_URL` to the deployed backend URL.
+- **Identity:** a transaction is keyed by `(id, label)`. Same key means same transaction.
+- **Windows:** the first request opens a window and later matches are absorbed.
+  - `PAYMENT`: 2.0s
+  - `REFUND`: 3.0s
+  - `INVENTORY_LOCK`: 1.5s
+- **Success:** the active slot and all absorbed duplicates are evicted.
+- **Failure:** the next valid duplicate is promoted and gets a fresh window. If none remain, the transaction ends as a terminal failure.
+- **Atomicity:** every state change per key runs inside `ConcurrentHashMap.compute`, so no global lock is needed.
+
+## Cockpit indicators
+
+| Phase | Indicator | Meaning |
+|---|---|---|
+| Tracking | Green, pulsing | Window open, no duplicates |
+| Concurrent | Red, flashing | A similar request just arrived |
+| Absorbing | Orange, pulsing | Duplicates held in the buffer |
+| Resolved | Solid green | All flags cleared |
+
+A header bar shows the worst phase across all open windows.
+
+## Stack
+
+- **Backend:** Java 17+, no dependencies
+- **Frontend:** React 18 + Vite
+
+## Run locally
+
+```bash
+# Backend (port 8080, override with RTPE_PORT)
+cd backend
+mkdir -p out && javac -d out src/main/java/rtpe/*.java
+java -cp out rtpe.RtpeServer
+
+# Cockpit (port 5173, override API with VITE_RTPE_URL)
+cd frontend
+npm install
+npm run dev
+```
+
+## API
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/state?since=<seq>` | Wallet, stats, live windows, new log events |
+| POST | `/api/transactions?id=&label=&amount=&fail=` | Submit a transaction |
+| POST | `/api/reset` | Reset the sandbox |
+
+
+Creating a test api for intrested users 
+
+Or with Maven (JDK 17+):
+
+```bash
+cd backend
+mvn -q package
+java -jar target/rtpe-backend.jar
+```
+
+## Sentinel lab
+
+Open the cockpit and go to `#lab` (or use "Sentinel lab" in the header). It has account sign-in, an attack test window, a live community activity log and a contributor leaderboard.
+
+Runtime data is written next to where the backend starts: `users.tsv` (accounts), `contrib.tsv` (contributions) and `poi.tsv` (blacklist). On hosts with an ephemeral disk (such as Render's free tier) these are lost on restart. Point `USERS_FILE`, `CONTRIB_FILE` and `POI_FILE` at a persistent disk, or move them to a database.
