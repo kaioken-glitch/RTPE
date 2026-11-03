@@ -19,7 +19,9 @@ public final class RtpeServer {
     private final TransactionEngine engine = new TransactionEngine(ledger::execute, log);
 
     public static void main(String[] args) throws IOException {
-        int port = Integer.parseInt(System.getenv().getOrDefault("RTPE_PORT", "8080"));
+        String portValue = System.getenv().getOrDefault(
+                "RTPE_PORT", System.getenv().getOrDefault("PORT", "8080"));
+        int port = Integer.parseInt(portValue);
         new RtpeServer().start(port);
     }
 
