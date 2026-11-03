@@ -81,3 +81,10 @@ export const register = (name, password) => form('/api/auth/register', name, pas
 export const login = (name, password) => form('/api/auth/login', name, password);
 export const logout = () => call('/api/auth/logout', 'POST', { device: false });
 export const fetchMe = () => call('/api/auth/me', 'GET', { device: false });
+export const exchangeSupabaseToken = (token) => raw('/api/auth/supabase', {
+  method: 'POST',
+  device: false,
+  auth: false,
+  timeoutMs: 12000,
+  headers: { Authorization: `Bearer ${token}` },
+});

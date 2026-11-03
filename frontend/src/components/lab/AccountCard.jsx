@@ -1,9 +1,9 @@
 import { useState } from 'react';
 
 export default function AccountCard({ auth }) {
-  const { user, ready, error, busy, login, register, logout, clearError } = auth;
+  const { user, ready, error, busy, available, login, register, googleLogin, logout, clearError } = auth;
   const [mode, setMode] = useState('login');
-  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
 
   if (!ready) return <section className="payment-section lab-card"><h2>Account</h2><p className="hint">Checking session</p></section>;
@@ -32,8 +32,8 @@ export default function AccountCard({ auth }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    const ok = await (mode === 'login' ? login(name, pw) : register(name, pw));
-    if (ok) { setPw(''); setName(''); }
+    const ok = await (mode === 'login' ? login(email, pw) : register(email, pw));
+    if (ok) { setPw(''); setEmail(''); }
   };
   const switchMode = (m) => { setMode(m); clearError(); };
 
@@ -46,20 +46,25 @@ export default function AccountCard({ auth }) {
       </div>
       <form onSubmit={submit} className="lab-form">
         <div className="field">
-          <label htmlFor="lab-user">Username</label>
-          <input id="lab-user" value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" maxLength={24} required />
+          <label htmlFor="lab-email">Email</label>
+          <input id="lab-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" maxLength={254} required />
         </div>
         <div className="field">
           <label htmlFor="lab-pass">Password</label>
-          <input id="lab-pass" type="password" value={pw} onChange={(e) => setPw(e.target.value)} maxLength={128} required
+          <input id="lab-pass" type="password" value={pw} onChange={(e) => setPw(e.target.value)} maxLength={128}
+                 minLength={mode === 'register' ? 8 : undefined} required
                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
         </div>
-        {mode === 'register' && <p className="hint">3-24 letters, numbers or underscores. Password at least 10 characters. Your username shows in the public activity log.</p>}
-        <button className="save-button solid" type="submit" disabled={busy || !name.trim() || !pw}>
+        {mode === 'register' && <p className="hint">Your email provider verifies your account. A display name is generated from your email for the public activity log.</p>}
+        <button className="save-button solid" type="submit" disabled={!available || busy || !email.trim() || !pw}>
           {busy ? 'Working' : mode === 'login' ? 'Sign in' : 'Create account'}
+        </button>
+        <button className="sx-chip" type="button" onClick={googleLogin} disabled={!available || busy}>
+          Continue with Google
         </button>
         {error && <p className="error" role="alert">{error}</p>}
       </form>
+      {!available && <p className="error" role="status">Authentication is not configured. Set the Supabase frontend environment variables to enable sign-in.</p>}
       <p className="hint">You can test without an account as a guest, but guests earn no points.</p>
     </section>
   );

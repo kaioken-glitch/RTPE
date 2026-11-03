@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { communityStream } from '../../api.js';
 
 const CAP = 300;
-const KIND_CLASS = { RECEIVED: 'info', CLEAN: 'ok', CLEARED: 'ok', IRREGULAR: 'warn', ATTACK: 'bad', SUNK: 'bad', BLACKLISTED: 'bad' };
+const KIND_CLASS = { RECEIVED: 'info', CLEAN: 'ok', CLEARED: 'ok', IRREGULAR: 'warn', ATTACK: 'bad', SUNK: 'bad', BLACKLISTED: 'bad', TRIGGER: 'trigger' };
 const clock = (ts) => new Date(ts).toLocaleTimeString('en-GB', { hour12: false });
 
-export default function CommunityLog({ me }) {
+export default function CommunityLog({ me, triggerEvents }) {
   const [events, setEvents] = useState([]);
   const [live, setLive] = useState(true);
   const seq = useRef(0);
@@ -35,23 +35,24 @@ export default function CommunityLog({ me }) {
   useEffect(() => {
     const el = box.current;
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
-  }, [events]);
+  }, [events, triggerEvents]);
 
   const onScroll = () => {
     const el = box.current;
     pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
   };
+  const visibleEvents = [...events, ...triggerEvents].sort((a, b) => a.ts - b.ts).slice(-CAP);
 
   return (
     <section className="payment-section lab-card" id="community">
       <div className="lab-row">
-        <h2>Community activity</h2>
+        <h2>Sentinel terminal</h2>
         <span className={`lab-live ${live ? 'on' : ''}`}>{live ? 'Live' : 'Reconnecting'}</span>
       </div>
-      <p className="hint">Everyone's tests as they happen, from this page or from scripts calling the same endpoint. Payload text and IP addresses are never shown.</p>
-      <div className="log-box lab-log" ref={box} onScroll={onScroll} role="log" aria-live="off">
-        {events.length === 0 && <p className="lab-empty">Waiting for activity.</p>}
-        {events.map((e) => (
+      <p className="hint">Live Sentinel test events and local UI triggers. Payload text and IP addresses are never shown.</p>
+      <div className="log-box lab-log lab-terminal" ref={box} onScroll={onScroll} role="log" aria-live="off">
+        {visibleEvents.length === 0 && <p className="lab-empty">Waiting for activity.</p>}
+        {visibleEvents.map((e) => (
           <p key={e.seq} className={me && e.who === me ? 'mine' : ''}>
             <time>{clock(e.ts)}</time>{' '}
             <b className={`k-${KIND_CLASS[e.kind] ?? 'info'}`}>{e.kind}</b>{' '}

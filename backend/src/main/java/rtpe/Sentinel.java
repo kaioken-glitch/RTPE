@@ -53,7 +53,7 @@ public final class Sentinel {
 
     // ---------- model ----------
     static final class Cargo {
-        final String id, ip, fp, device, method, target, batchId;
+        final String id, ip, fp, device, method, target, batchId, user, who;
         final boolean sandbox, oversize;
         final long ts = System.currentTimeMillis();
         volatile String body;                       // dropped when swallowed
@@ -61,9 +61,10 @@ public final class Sentinel {
         volatile int score, recycles;
         volatile long sinkAt, doneAt;
         final List<String> labels = new CopyOnWriteArrayList<>();
-        Cargo(String id, String ip, String fp, String device, String method, String target, String body, String batchId, boolean sandbox, boolean oversize) {
+        Cargo(String id, String ip, String fp, String device, String method, String target, String body, String batchId, boolean sandbox, boolean oversize, String user, String who) {
             this.id = id; this.ip = ip; this.fp = fp; this.device = device; this.method = method;
             this.target = target; this.body = body; this.batchId = batchId; this.sandbox = sandbox; this.oversize = oversize;
+            this.user = user; this.who = who;
         }
         String inspectText() { return method + " " + target + "\n" + (body == null ? "" : body); }
     }
@@ -174,15 +175,19 @@ public final class Sentinel {
         if (s.score() >= ATTACK_AT) {
             c.state = "ATTACK"; c.sinkAt = now + SINK_MS; flag(c.ip);
             event("WARN", "[" + c.id + " " + mask(c.ip) + "] ATTACK " + s.labels() + " score=" + s.score() + " sink in " + SINK_MS / 1000 + "s");
+            activity(c, "ATTACK", "Threat detected: " + String.join(", ", c.labels) + " (score " + c.score + ")");
             TIMER.schedule(() -> sink(c), SINK_MS, TimeUnit.MILLISECONDS);
         } else if (s.score() > 0 && pass == 1) {
             c.state = "IRREGULAR"; c.recycles++; flag(c.ip);
             event("INFO", "[" + c.id + " " + mask(c.ip) + "] IRREGULAR " + s.labels() + " score=" + s.score() + " recycling");
+            activity(c, "IRREGULAR", "Irregular activity sent for re-check");
             TIMER.schedule(() -> recycle(c), RECYCLE_MS, TimeUnit.MILLISECONDS);
         } else if (s.score() > 0) {
             c.state = "CLEARED"; c.doneAt = now;
             event("INFO", "[" + c.id + " " + mask(c.ip) + "] CLEARED after recycle score=" + s.score());
+            finishSandbox(c, "CLEARED");
         } else { c.state = "CLEAN"; c.doneAt = now; }
+        if (c.state.equals("CLEAN")) finishSandbox(c, "CLEAN");
     }
 
     /** second look: deeper normalisation plus the sender's recent history */
@@ -213,6 +218,7 @@ public final class Sentinel {
         if (counts && p.batches.add(c.batchId)) p.strikes++;      // one strike per distinct window
         c.body = null; c.state = "SUNK"; c.doneAt = System.currentTimeMillis();
         event("INFO", "[" + c.id + " " + mask(c.ip) + "] SUNK sig=" + sig + " poi strikes=" + p.strikes + (counts ? "" : " (sandbox, no strike)"));
+        finishSandbox(c, "SUNK", sig);
         if (p.strikes >= 2) blacklist(p);
         persist();
     }
@@ -262,10 +268,28 @@ public final class Sentinel {
 
     static Cargo ingest(HttpExchange ex, Batch b, String ip, String device, String body, boolean oversize, boolean sandbox) {
         String q = ex.getRequestURI().getRawQuery();
+        String user = sandbox ? Accounts.userOf(ex) : null;
         Cargo c = new Cargo("CRG-" + Long.toString(SEQ.incrementAndGet(), 36).toUpperCase() + Integer.toString(RND.nextInt(1296), 36).toUpperCase(),
-            ip, fingerprint(ex), device, ex.getRequestMethod(), ex.getRequestURI().getRawPath() + (q == null ? "" : "?" + q), body, b.id, sandbox, oversize);
+            ip, fingerprint(ex), device, ex.getRequestMethod(), ex.getRequestURI().getRawPath() + (q == null ? "" : "?" + q), body, b.id, sandbox, oversize,
+            user, Accounts.who(user, ip, device));
         LIVE.put(c.id, c); b.cargo.add(c);
+        if (sandbox) activity(c, "RECEIVED", "Payload received by Sentinel sandbox");
         return c;
+    }
+
+    static void activity(Cargo c, String kind, String text) {
+        if (c.sandbox) Accounts.emit(c.who, kind, c.id, text);
+    }
+
+    static void finishSandbox(Cargo c, String outcome) {
+        if (!c.sandbox) return;
+        finishSandbox(c, outcome, sha(normalise(c.inspectText())).substring(0, 12));
+    }
+
+    static void finishSandbox(Cargo c, String outcome, String signature) {
+        if (!c.sandbox) return;
+        activity(c, outcome, "Test completed: " + outcome + (c.labels.isEmpty() ? "" : " · " + String.join(", ", c.labels)));
+        if (c.user != null) Accounts.contribute(c.user, signature, outcome, c.labels);
     }
 
     /** the test window: POST /sandbox with any text, GET /sandbox/{id} for your own receipt */
@@ -386,7 +410,7 @@ public final class Sentinel {
         h.set("X-Content-Type-Options", "nosniff");
         h.set("Cache-Control", "no-store");
         h.set("Access-Control-Allow-Origin", ALLOW_ORIGIN);
-        h.set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token, X-Device-Id");
+        h.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Admin-Token, X-Device-Id");
         h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         if (code == 204) { ex.sendResponseHeaders(204, -1); return; }
         ex.sendResponseHeaders(code, out.length);

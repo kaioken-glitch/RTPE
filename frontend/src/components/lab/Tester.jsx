@@ -19,12 +19,27 @@ const PHASE = {
   CLEARED:   { phase: 'resolved',  label: 'Cleared',   note: 'False alarm, released' },
 };
 
-export default function Tester({ user }) {
+export default function Tester({ user, triggerEnabled, onTriggerEnabledChange, onCustomTrigger }) {
   const [feed, setFeed] = useState(null);
   const [text, setText] = useState(PRESETS[2].text);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
+
+  useEffect(() => {
+    if (!triggerEnabled) return undefined;
+    let pulses = 0;
+    let nextTrigger = 3 + Math.floor(Math.random() * 3);
+    const timer = setInterval(() => {
+      pulses += 1;
+      if (pulses >= nextTrigger) {
+        onCustomTrigger(pulses);
+        pulses = 0;
+        nextTrigger = 3 + Math.floor(Math.random() * 3);
+      }
+    }, 700);
+    return () => clearInterval(timer);
+  }, [triggerEnabled, onCustomTrigger]);
 
   useEffect(() => {
     let alive = true;
@@ -67,6 +82,17 @@ export default function Tester({ user }) {
       <div className="sx-actions">
         <button className="save-button solid" onClick={send} disabled={busy || !text.trim() || you?.blocked}>Send payload</button>
         {feed && <span className="sx-stats">Window {feed.window.id.split('-').pop()} closes in {(feed.window.closesInMs / 1000).toFixed(1)}s</span>}
+      </div>
+      <div className="sx-trigger">
+        <button
+          className={`sx-chip ${triggerEnabled ? 'on' : ''}`}
+          type="button"
+          aria-pressed={triggerEnabled}
+          onClick={() => onTriggerEnabledChange(!triggerEnabled)}
+        >
+          Custom trigger: {triggerEnabled ? 'On' : 'Off'}
+        </button>
+        <span className="hint">When on, it adds a UI-only event to the terminal every random 3–5 tester pulses. It does not send a payload.</span>
       </div>
       {(you?.blocked || error) && <p className="error" role="alert">{you?.blocked ? 'Your IP or device is blacklisted. Requests are refused.' : error}</p>}
       {you && <p className="sx-you">IP label <code>{you.ip}</code> · device <code>{you.device ?? 'none'}</code> · strikes {you.strikes}/2</p>}

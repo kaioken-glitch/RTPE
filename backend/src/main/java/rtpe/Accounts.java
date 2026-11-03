@@ -6,12 +6,17 @@ import com.sun.net.httpserver.HttpServer;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import java.io.IOException;
+import java.net.URI;
 import java.net.URLDecoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -33,6 +38,12 @@ public final class Accounts {
     // ---------- config ----------
     static final Path USERS_FILE = Path.of(Sentinel.env("USERS_FILE", "users.tsv"));
     static final Path CONTRIB_FILE = Path.of(Sentinel.env("CONTRIB_FILE", "contrib.tsv"));
+    static final Path SUPABASE_USERS_FILE = Path.of(Sentinel.env("SUPABASE_USERS_FILE", "supabase-users.tsv"));
+    static final String SUPABASE_URL = Sentinel.env("SUPABASE_URL", "");
+    static final String SUPABASE_ANON_KEY = Sentinel.env("SUPABASE_ANON_KEY", "");
+    static final HttpClient SUPABASE_HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    static final Pattern SUPABASE_ID = Pattern.compile("\"id\"\\s*:\\s*\"([0-9a-fA-F-]{36})\"");
+    static final Pattern SUPABASE_EMAIL = Pattern.compile("\"email\"\\s*:\\s*\"([^\"\\s]+@[^\"\\s]+)\"");
     static final int ITER = Integer.parseInt(Sentinel.env("PBKDF2_ITER", "210000"));
     static final long SESSION_MS = 7L * 24 * 3_600_000;
     static final long LOGIN_WINDOW_MS = 10 * 60_000, REG_WINDOW_MS = 3_600_000, EARN_WINDOW_MS = 3_600_000;
@@ -53,6 +64,8 @@ public final class Accounts {
     }
 
     static final Map<String, User> USERS = new ConcurrentHashMap<>();       // key: lower-case name
+    static final Map<String, User> SUPABASE_USERS = new ConcurrentHashMap<>(); // key: Supabase user id
+    static final Set<String> SUPABASE_NAMES = ConcurrentHashMap.newKeySet();
     static final Map<String, Session> SESSIONS = new ConcurrentHashMap<>(); // key: sha256(token)
     static final Map<String, Stats> STATS = new ConcurrentHashMap<>();
     static final Map<String, String> SIG_FIRST = new ConcurrentHashMap<>(); // signature -> first contributor
@@ -113,6 +126,7 @@ public final class Accounts {
             switch (path) {
                 case "/api/auth/register" -> { if (post(ex, method)) register(ex); }
                 case "/api/auth/login" -> { if (post(ex, method)) login(ex); }
+                case "/api/auth/supabase" -> { if (post(ex, method)) supabase(ex); }
                 case "/api/auth/logout" -> { if (post(ex, method)) logout(ex); }
                 case "/api/auth/me" -> me(ex);
                 default -> Sentinel.send(ex, 404, "{\"error\":\"unknown route\"}");
@@ -183,6 +197,88 @@ public final class Accounts {
         }
         ATTEMPTS.remove("u:" + lower);
         Sentinel.send(ex, 200, Sentinel.json(Sentinel.obj("token", issue(u), "user", profile(u))));
+    }
+
+    static void supabase(HttpExchange ex) throws IOException {
+        String ip = Sentinel.clientIp(ex);
+        String device = Sentinel.deviceId(ex);
+        if (Sentinel.blocked(ip, device)) { err(ex, 403, "blocked by sentinel"); return; }
+        if (SUPABASE_URL.isBlank() || SUPABASE_ANON_KEY.isBlank()) {
+            err(ex, 503, "Supabase authentication is not configured on the backend");
+            return;
+        }
+        String token = bearer(ex);
+        if (token == null || token.length() > 8192) { err(ex, 401, "invalid Supabase session"); return; }
+        String rateKey = "supabase:" + ip;
+        if (tooMany(rateKey, 60, 60_000)) { err(ex, 429, "too many sign-in requests, try again shortly"); return; }
+        record(rateKey);
+
+        try {
+            URI endpoint = URI.create(SUPABASE_URL.replaceAll("/+$", "") + "/auth/v1/user");
+            HttpRequest request = HttpRequest.newBuilder(endpoint)
+                    .timeout(Duration.ofSeconds(10))
+                    .header("apikey", SUPABASE_ANON_KEY)
+                    .header("Authorization", "Bearer " + token)
+                    .GET()
+                    .build();
+            HttpResponse<String> response = SUPABASE_HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                err(ex, 503, "Supabase authentication is temporarily unavailable");
+                return;
+            }
+            if (response.statusCode() != 200) { err(ex, 401, "invalid or expired Supabase session"); return; }
+
+            var idMatch = SUPABASE_ID.matcher(response.body());
+            var emailMatch = SUPABASE_EMAIL.matcher(response.body());
+            if (!idMatch.find() || !emailMatch.find()) { err(ex, 401, "Supabase returned an incomplete user profile"); return; }
+            String id;
+            try { id = UUID.fromString(idMatch.group(1)).toString(); }
+            catch (IllegalArgumentException e) { err(ex, 401, "Supabase returned an invalid user id"); return; }
+
+            User user = supabaseUser(id, emailMatch.group(1));
+            Sentinel.send(ex, 200, Sentinel.json(Sentinel.obj("token", issue(user), "user", profile(user))));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            err(ex, 503, "Supabase authentication was interrupted; try again");
+        } catch (IOException e) {
+            Sentinel.event("WARN", "Supabase sign-in could not be completed: " + e.getClass().getSimpleName());
+            err(ex, 503, "Supabase sign-in could not be completed; try again");
+        } catch (IllegalArgumentException e) {
+            Sentinel.event("ERROR", "invalid Supabase authentication configuration");
+            err(ex, 503, "Supabase authentication is misconfigured on the backend");
+        }
+    }
+
+    static synchronized User supabaseUser(String id, String email) throws IOException {
+        User existing = SUPABASE_USERS.get(id);
+        if (existing != null) return existing;
+
+        String local = email.substring(0, email.indexOf('@')).replaceAll("[^A-Za-z0-9_]", "");
+        String base = local.length() > 24 ? local.substring(0, 24) : local;
+        String compactId = id.replace("-", "");
+        if (!NAME.matcher(base).matches()) base = "user_" + compactId.substring(0, 8);
+
+        for (int suffixLength = 0; suffixLength <= 23; suffixLength += suffixLength == 0 ? 4 : 1) {
+            String suffix = suffixLength == 0 ? "" : "_" + compactId.substring(0, suffixLength);
+            int prefixLength = Math.min(base.length(), 24 - suffix.length());
+            String name = base.substring(0, prefixLength) + suffix;
+            String key = name.toLowerCase(Locale.ROOT);
+            User user = new User(name, randomBytes(16), randomBytes(32), ITER, System.currentTimeMillis());
+            if (USERS.putIfAbsent(key, user) == null) {
+                SUPABASE_NAMES.add(key);
+                SUPABASE_USERS.put(id, user);
+                try {
+                    persistSupabaseUsers();
+                } catch (IOException e) {
+                    SUPABASE_USERS.remove(id, user);
+                    SUPABASE_NAMES.remove(key);
+                    USERS.remove(key, user);
+                    throw e;
+                }
+                return user;
+            }
+        }
+        throw new IllegalStateException("could not allocate a Sentinel display name");
     }
 
     static void logout(HttpExchange ex) throws IOException {
@@ -304,13 +400,28 @@ public final class Accounts {
         try {
             StringBuilder sb = new StringBuilder();
             HexFormat hx = HexFormat.of();
-            for (User u : USERS.values())
+            for (Map.Entry<String, User> entry : USERS.entrySet()) {
+                if (SUPABASE_NAMES.contains(entry.getKey())) continue;
+                User u = entry.getValue();
                 sb.append(u.name()).append('\t').append(hx.formatHex(u.salt())).append('\t').append(hx.formatHex(u.hash())).append('\t')
                   .append(u.iter()).append('\t').append(u.created()).append('\n');
+            }
             Path tmp = USERS_FILE.resolveSibling(USERS_FILE.getFileName() + ".tmp");
             Files.writeString(tmp, sb.toString());
             Files.move(tmp, USERS_FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (Exception e) { Sentinel.event("ERROR", "could not save users: " + e); }
+    }
+
+    static synchronized void persistSupabaseUsers() throws IOException {
+        StringBuilder sb = new StringBuilder();
+        SUPABASE_USERS.forEach((id, user) -> sb.append(id).append('\t').append(user.name()).append('\t').append(user.created()).append('\n'));
+        Path tmp = SUPABASE_USERS_FILE.resolveSibling(SUPABASE_USERS_FILE.getFileName() + ".tmp");
+        Files.writeString(tmp, sb.toString());
+        try {
+            Files.move(tmp, SUPABASE_USERS_FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(tmp, SUPABASE_USERS_FILE, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     static void load() {
@@ -321,6 +432,18 @@ public final class Accounts {
                     String[] f = line.split("\t", -1);
                     if (f.length < 5) continue;
                     USERS.put(f[0].toLowerCase(Locale.ROOT), new User(f[0], hx.parseHex(f[1]), hx.parseHex(f[2]), Integer.parseInt(f[3]), Long.parseLong(f[4])));
+                }
+            if (Files.exists(SUPABASE_USERS_FILE))
+                for (String line : Files.readAllLines(SUPABASE_USERS_FILE)) {
+                    String[] f = line.split("\t", -1);
+                    if (f.length < 3 || !NAME.matcher(f[1]).matches()) continue;
+                    String id = UUID.fromString(f[0]).toString();
+                    String key = f[1].toLowerCase(Locale.ROOT);
+                    User user = new User(f[1], randomBytes(16), randomBytes(32), ITER, Long.parseLong(f[2]));
+                    if (USERS.putIfAbsent(key, user) == null) {
+                        SUPABASE_USERS.put(id, user);
+                        SUPABASE_NAMES.add(key);
+                    }
                 }
             if (Files.exists(CONTRIB_FILE))
                 for (String line : Files.readAllLines(CONTRIB_FILE)) {

@@ -23,6 +23,10 @@
 .lab-log .who { color: var(--fg); }
 .lab-log .mine { background: color-mix(in srgb, var(--go) 9%, transparent); }
 .lab-log .k-ok { color: var(--go); } .lab-log .k-warn { color: var(--warn); } .lab-log .k-bad { color: var(--alert); } .lab-log .k-info { color: var(--muted); }
+.lab-log .k-trigger { color: var(--go); }
+.lab-terminal { background: color-mix(in srgb, var(--surface) 88%, #07120d); }
+.sx-trigger { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-top: .9rem; }
+.sx-trigger .hint { margin: 0; }
 .lab-empty { color: var(--muted); }
 .lab-scroll { overflow-x: auto; margin-top: .9rem; }
 .lab-table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }

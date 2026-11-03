@@ -29,7 +29,7 @@ A header bar shows the worst phase across all open windows.
 ## Stack
 
 - **Backend:** Java 17+, no dependencies
-- **Frontend:** React 18 + Vite
+- **Frontend:** React 18 + Vite (Node.js 22+)
 
 ## Run locally
 
@@ -66,6 +66,15 @@ java -jar target/rtpe-backend.jar
 
 ## Sentinel lab
 
-Open the cockpit and go to `#lab` (or use "Sentinel lab" in the header). It has account sign-in, an attack test window, a live community activity log and a contributor leaderboard.
+Open the cockpit and go to `#lab` (or use "Sentinel lab" in the header). The lab supports Supabase email/password accounts and Google sign-in, an attack test window, a live Sentinel terminal and a contributor leaderboard. The optional custom trigger is off by default and adds a local-only terminal event every random 3–5 tester polls; it does not send a request.
 
-Runtime data is written next to where the backend starts: `users.tsv` (accounts), `contrib.tsv` (contributions) and `poi.tsv` (blacklist). On hosts with an ephemeral disk (such as Render's free tier) these are lost on restart. Point `USERS_FILE`, `CONTRIB_FILE` and `POI_FILE` at a persistent disk, or move them to a database.
+Set these frontend build variables to your Supabase project:
+
+```text
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<publishable-or-anon-key>
+```
+
+Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` to the same project URL and public anon/publishable key in the backend environment. The backend verifies Supabase access tokens with Supabase Auth and issues its own short-lived Sentinel session; do not put a service-role key or Google client secret in frontend variables. In Supabase, enable Email and Google under **Authentication → Providers** and add your Google OAuth client ID and secret there. Set `https://<project-ref>.supabase.co/auth/v1/callback` as the authorized redirect URI in Google Cloud, then add the deployed frontend URL to Supabase's allowed redirect URLs.
+
+Runtime data is written next to where the backend starts: `users.tsv` (legacy local accounts), `supabase-users.tsv` (Supabase-to-leaderboard name mapping), `contrib.tsv` (contributions) and `poi.tsv` (blacklist). On hosts with an ephemeral disk these files are lost on restart; configure `USERS_FILE`, `SUPABASE_USERS_FILE`, `CONTRIB_FILE` and `POI_FILE` on a persistent disk, or move them to a database.
